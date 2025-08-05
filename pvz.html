@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>植物大战僵尸网页版</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+        
+        #game-container {
+            width: 800px;
+            height: 600px;
+            margin: 20px auto;
+            position: relative;
+            background-color: #8bc34a;
+            border: 5px solid #5a9216;
+            overflow: hidden;
+        }
+        
+        #lawn {
+            display: grid;
+            grid-template-columns: repeat(9, 1fr);
+            grid-template-rows: repeat(5, 1fr);
+            width: 100%;
+            height: 100%;
+        }
+        
+        .lawn-cell {
+            border: 1px dashed rgba(0, 0, 0, 0.2);
+            position: relative;
+        }
+        
+        #plant-selector {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            display: flex;
+            background-color: rgba(255, 255, 255, 0.7);
+            padding: 10px;
+            border-radius: 10px;
+        }
+        
+        .plant-option {
+            width: 50px;
+            height: 50px;
+            margin: 0 5px;
+            background-color: #4caf50;
+            border: 2px solid #2e7d32;
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-weight: bold;
+            color: white;
+        }
+        
+        .plant-option:hover {
+            background-color: #2e7d32;
+        }
+        
+        .sun {
+            width: 40px;
+            height: 40px;
+            background-color: yellow;
+            border-radius: 50%;
+            position: absolute;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            box-shadow: 0 0 10px yellow;
+        }
+        
+        .plant {
+            width: 60px;
+            height: 60px;
+            position: absolute;
+            z-index: 10;
+        }
+        
+        .peashooter {
+            background-color: green;
+            border-radius: 50%;
+        }
+        
+        .sunflower {
+            background-color: yellow;
+            border-radius: 50%;
+        }
+        
+        .wallnut {
+            background-color: brown;
+            border-radius: 10px;
+        }
+        
+        .zombie {
+            width: 50px;
+            height: 80px;
+            background-color: #607d8b;
+            position: absolute;
+            right: -50px;
+            z-index: 5;
+            animation: zombie-walk 0.5s infinite steps(2);
+        }
+        
+        @keyframes zombie-walk {
+            0% { background-position: 0 0; }
+            100% { background-position: -100px 0; }
+        }
+        
+        .projectile {
+            width: 20px;
+            height: 20px;
+            background-color: green;
+            border-radius: 50%;
+            position: absolute;
+            z-index: 8;
+        }
+        
+        #sun-counter {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: rgba(255, 255, 255, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 24px;
+            font-weight: bold;
+        }
+        
+        #game-over {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 48px;
+            z-index: 100;
+        }
+        
+        #restart-btn {
+            margin-top: 20px;
+            padding: 10px 20px;
+            font-size: 24px;
+            background-color: #4caf50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        
+        .health-bar {
+            position: absolute;
+            bottom: -10px;
+            left: 0;
+            width: 100%;
+            height: 5px;
+            background-color: #f44336;
+            z-index: 15;
+        }
+        
+        .health-fill {
+            height: 100%;
+            background-color: #4caf50;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="lawn"></div>
+        <div id="plant-selector">
+            <div class="plant-option" data-plant="sunflower" data-cost="50">🌻</div>
+            <div class="plant-option" data-plant="peashooter" data-cost="100">🌱</div>
+            <div class="plant-option" data-plant="wallnut" data-cost="50">🌰</div>
+        </div>
+        <div id="sun-counter">阳光: 50</div>
+        <div id="game-over">
+            <div>游戏结束!</div>
+            <button id="restart-btn">重新开始</button>
+        </div>
+    </div>
+
+    <script>
+        // 游戏状态
+        const gameState = {
+            sun: 50,
+            selectedPlant: null,
+            plants: [],
+            zombies: [],
+            projectiles: [],
+            suns: [],
+            gameActive: true,
+            rows: 5,
+            cols: 9,
+            cellWidth: 800 / 9,
+            cellHeight: 600 / 5
+        };
+
+        // DOM元素
+        const lawn = document.getElementById('lawn');
+        const sunCounter = document.getElementById('sun-counter');
+        const plantOptions = document.querySelectorAll('.plant-option');
+        const gameOverScreen = document.getElementById('game-over');
+        const restartBtn = document.getElementById('restart-btn');
+
+        // 初始化草坪
+        function initLawn() {
+            lawn.innerHTML = '';
+            for (let row = 0; row < gameState.rows; row++) {
+                for (let col = 0; col < gameState.cols; col++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'lawn-cell';
+                    cell.dataset.row = row;
+                    cell.dataset.col = col;
+                    cell.addEventListener('click', () => placePlant(row, col));
+                    lawn.appendChild(cell);
+                }
+            }
+        }
+
+        // 选择植物
+        plantOptions.forEach(option => {
+            option.addEventListener('click', function() {
+                const plantType = this.dataset.plant;
+                const cost = parseInt(this.dataset.cost);
+                
+                if (gameState.sun >= cost) {
+                    gameState.selectedPlant = plantType;
+                    plantOptions.forEach(opt => opt.style.border = '2px solid #2e7d32');
+                    this.style.border = '2px solid red';
+                } else {
+                    alert('阳光不足!');
+                }
+            });
+        });
+
+        // 放置植物
+        function placePlant(row, col) {
+            if (!gameState.selectedPlant || !gameState.gameActive) return;
+            
+            // 检查是否已经有植物在这个位置
+            const cellHasPlant = gameState.plants.some(
+                plant => plant.row === row && plant.col === col
+            );
+            
+            if (cellHasPlant) return;
+            
+            const cost = getPlantCost(gameState.selectedPlant);
+            if (gameState.sun < cost) {
+                alert('阳光不足!');
+                return;
+            }
+            
+            gameState.sun -= cost;
+            updateSunCounter();
+            
+            const plant = {
+                type: gameState.selectedPlant,
+                row,
+                col,
+                cooldown: 0,
+                health: getPlantHealth(gameState.selectedPlant),
+                maxHealth: getPlantHealth(gameState.selectedPlant),
+                element: null,
+                healthBar: null
+            };
+            
+            gameState.plants.push(plant);
+            renderPlant(plant);
+            
+            // 如果是向日葵，开始产生阳光
+            if (plant.type === 'sunflower') {
+                plant.cooldown = 300; // 向日葵生产阳光的冷却时间
+            }
+        }
+
+        // 渲染植物
+        function renderPlant(plant) {
+            const cell = document.querySelector(`.lawn-cell[data-row="${plant.row}"][data-col="${plant.col}"]`);
+            if (!cell) return;
+            
+            const plantEl = document.createElement('div');
+            plantEl.className = `plant ${plant.type}`;
+            plantEl.dataset.row = plant.row;
+            plantEl.dataset.col = plant.col;
+            
+            // 简单表示不同类型的植物
+            if (plant.type === 'peashooter') {
+                plantEl.textContent = '🌱';
+            } else if (plant.type === 'sunflower') {
+                plantEl.textContent = '🌻';
+            } else if (plant.type === 'wallnut') {
+                plantEl.textContent = '🌰';
+            }
+            
+            // 添加血条
+            const healthBar = document.createElement('div');
+            healthBar.className = 'health-bar';
+            const healthFill = document.createElement('div');
+            healthFill.className = 'health-fill';
+            healthFill.style.width = '100%';
+            healthBar.appendChild(healthFill);
+            plantEl.appendChild(healthBar);
+            
+            cell.appendChild(plantEl);
+            
+            plant.element = plantEl;
+            plant.healthBar = healthFill;
+            
+            // 更新血条
+            updatePlantHealth(plant);
+        }
+
+        // 更新植物血条
+        function updatePlantHealth(plant) {
+            if (plant.healthBar) {
+                const percent = (plant.health / plant.maxHealth) * 100;
+                plant.healthBar.style.width = `${percent}%`;
+                
+                // 根据血量改变颜色
+                if (percent < 30) {
+                    plant.healthBar.style.backgroundColor = '#f44336'; // 红色
+                } else if (percent < 60) {
+                    plant.healthBar.style.backgroundColor = '#ff9800'; // 橙色
+                } else {
+                    plant.healthBar.style.backgroundColor = '#4caf50'; // 绿色
+                }
+            }
+        }
+
+        // 生成阳光
+        function generateSun() {
+            if (!gameState.gameActive) return;
+            
+            // 随机位置生成阳光
+            const x = Math.random() * 700 + 50;
+            const y = Math.random() * 400 + 50;
+            
+            const sun = {
+                x,
+                y,
+                value: 25,
+                element: null,
+                speed: 1,
+                collected: false
+            };
+            
+            gameState.suns.push(sun);
+            
+            const sunEl = document.createElement('div');
+            sunEl.className = 'sun';
+            sunEl.textContent = '☀️';
+            sunEl.style.left = `${x}px`;
+            sunEl.style.top = `${y}px`;
+            sunEl.addEventListener('click', () => collectSun(sun));
+            
+            document.getElementById('game-container').appendChild(sunEl);
+            sun.element = sunEl;
+            
+            // 阳光自动下落
+            const fallInterval = setInterval(() => {
+                if (sun.collected) {
+                    clearInterval(fallInterval);
+                    return;
+                }
+                
+                sun.y += sun.speed;
+                sunEl.style.top = `${sun.y}px`;
+                
+                if (sun.y > 550) {
+                    clearInterval(fallInterval);
+                    removeSun(sun);
+                }
+            }, 30);
+        }
+
+        // 收集阳光
+        function collectSun(sun) {
+            if (sun.collected) return;
+            
+            sun.collected = true;
+            gameState.sun += sun.value;
+            updateSunCounter();
+            removeSun(sun);
+        }
+
+        // 移除阳光
+        function removeSun(sun) {
+            if (sun.element && sun.element.parentNode) {
+                sun.element.parentNode.removeChild(sun.element);
+            }
+            gameState.suns = gameState.suns.filter(s => s !== sun);
+        }
+
+        // 更新阳光计数器
+        function updateSunCounter() {
+            sunCounter.textContent = `阳光: ${gameState.sun}`;
+        }
+
+        // 生成僵尸
+        function spawnZombie() {
+            if (!gameState.gameActive) return;
+            
+            const row = Math.floor(Math.random() * gameState.rows);
+            
+            const zombie = {
+                row,
+                x: 800,
+                health: 100,
+                maxHealth: 100,
+                speed: 0.5,
+                attackDamage: 0.5,
+                attackCooldown: 0,
+                attackRate: 60, // 每60帧攻击一次
+                element: null,
+                healthBar: null,
+                isAttacking: false
+            };
+            
+            gameState.zombies.push(zombie);
+            
+            const zombieEl = document.createElement('div');
+            zombieEl.className = 'zombie';
+            zombieEl.textContent = '🧟';
+            zombieEl.style.top = `${row * gameState.cellHeight + 30}px`;
+            zombieEl.style.left = `${zombie.x}px`;
+            
+            // 添加血条
+            const healthBar = document.createElement('div');
+            healthBar.className = 'health-bar';
+            const healthFill = document.createElement('div');
+            healthFill.className = 'health-fill';
+            healthFill.style.width = '100%';
+            healthBar.appendChild(healthFill);
+            zombieEl.appendChild(healthBar);
+            
+            document.getElementById('game-container').appendChild(zombieEl);
+            zombie.element = zombieEl;
+            zombie.healthBar = healthFill;
+        }
+
+        // 更新僵尸血条
+        function updateZombieHealth(zombie) {
+            if (zombie.healthBar) {
+                const percent = (zombie.health / zombie.maxHealth) * 100;
+                zombie.healthBar.style.width = `${percent}%`;
+            }
+        }
+
+        // 植物攻击
+        function plantAttack(plant) {
+            if (plant.type !== 'peashooter') return;
+            
+            // 检查这一行是否有僵尸
+            const zombiesInRow = gameState.zombies.filter(z => z.row === plant.row);
+            if (zombiesInRow.length === 0) return;
+            
+            // 创建豌豆
+            const projectile = {
+                row: plant.row,
+                x: plant.col * gameState.cellWidth + 30,
+                y: plant.row * gameState.cellHeight + 30,
+                speed: 5,
+                damage: 20,
+                element: null
+            };
+            
+            gameState.projectiles.push(projectile);
+            
+            const projectileEl = document.createElement('div');
+            projectileEl.className = 'projectile';
+            projectileEl.style.left = `${projectile.x}px`;
+            projectileEl.style.top = `${projectile.y}px`;
+            
+            document.getElementById('game-container').appendChild(projectileEl);
+            projectile.element = projectileEl;
+        }
+
+        // 僵尸攻击植物
+        function zombieAttackPlant(zombie, plant) {
+            if (zombie.attackCooldown <= 0) {
+                plant.health -= zombie.attackDamage;
+                updatePlantHealth(plant);
+                zombie.attackCooldown = zombie.attackRate;
+                zombie.isAttacking = true;
+                
+                // 添加攻击动画效果
+                if (zombie.element) {
+                    zombie.element.style.transform = 'translateX(-5px)';
+                    setTimeout(() => {
+                        if (zombie.element) {
+                            zombie.element.style.transform = '';
+                        }
+                    }, 100);
+                }
+                
+                // 检查植物是否死亡
+                if (plant.health <= 0) {
+                    removePlant(plant);
+                    zombie.isAttacking = false;
+                }
+            } else {
+                zombie.attackCooldown--;
+            }
+        }
+
+        // 游戏主循环
+        function gameLoop() {
+            if (!gameState.gameActive) return;
+            
+            // 植物行为
+            gameState.plants.forEach(plant => {
+                if (plant.type === 'sunflower' && plant.cooldown <= 0) {
+                    generateSun();
+                    plant.cooldown = 300; // 重置冷却时间
+                } else if (plant.type === 'peashooter' && plant.cooldown <= 0) {
+                    plantAttack(plant);
+                    plant.cooldown = 100; // 重置冷却时间
+                }
+                
+                if (plant.cooldown > 0) {
+                    plant.cooldown--;
+                }
+            });
+            
+            // 僵尸移动和行为
+            gameState.zombies.forEach(zombie => {
+                // 检查僵尸是否正在攻击植物
+                const attackingPlant = gameState.plants.find(plant => 
+                    plant.row === zombie.row && 
+                    Math.abs(plant.col * gameState.cellWidth - zombie.x) < 30
+                );
+                
+                if (attackingPlant) {
+                    // 僵尸攻击植物
+                    zombieAttackPlant(zombie, attackingPlant);
+                } else {
+                    // 僵尸移动
+                    zombie.x -= zombie.speed;
+                    zombie.isAttacking = false;
+                    if (zombie.element) {
+                        zombie.element.style.left = `${zombie.x}px`;
+                    }
+                }
+                
+                // 检查僵尸是否到达左边界
+                if (zombie.x < 0) {
+                    gameOver();
+                }
+            });
+            
+            // 豌豆移动
+            gameState.projectiles.forEach(projectile => {
+                projectile.x += projectile.speed;
+                if (projectile.element) {
+                    projectile.element.style.left = `${projectile.x}px`;
+                }
+                
+                // 检查豌豆是否击中僵尸
+                const hitZombie = gameState.zombies.find(z => 
+                    z.row === projectile.row && 
+                    Math.abs(z.x - projectile.x) < 30
+                );
+                
+                if (hitZombie) {
+                    hitZombie.health -= projectile.damage;
+                    updateZombieHealth(hitZombie);
+                    removeProjectile(projectile);
+                    
+                    if (hitZombie.health <= 0) {
+                        removeZombie(hitZombie);
+                    }
+                }
+                
+                // 检查豌豆是否超出边界
+                if (projectile.x > 800) {
+                    removeProjectile(projectile);
+                }
+            });
+            
+            // 随机生成僵尸
+            if (Math.random() < 0.01) {
+                spawnZombie();
+            }
+            
+            // 随机生成阳光
+            if (Math.random() < 0.02) {
+                generateSun();
+            }
+            
+            requestAnimationFrame(gameLoop);
+        }
+
+        // 移除植物
+        function removePlant(plant) {
+            gameState.plants = gameState.plants.filter(p => p !== plant);
+            if (plant.element && plant.element.parentNode) {
+                plant.element.parentNode.removeChild(plant.element);
+            }
+        }
+
+        // 移除僵尸
+        function removeZombie(zombie) {
+            gameState.zombies = gameState.zombies.filter(z => z !== zombie);
+            if (zombie.element && zombie.element.parentNode) {
+                zombie.element.parentNode.removeChild(zombie.element);
+            }
+        }
+
+        // 移除豌豆
+        function removeProjectile(projectile) {
+            gameState.projectiles = gameState.projectiles.filter(p => p !== projectile);
+            if (projectile.element && projectile.element.parentNode) {
+                projectile.element.parentNode.removeChild(projectile.element);
+            }
+        }
+
+        // 游戏结束
+        function gameOver() {
+            gameState.gameActive = false;
+            gameOverScreen.style.display = 'flex';
+        }
+
+        // 重新开始游戏
+        function restartGame() {
+            // 清除所有游戏元素
+            gameState.plants.forEach(plant => {
+                if (plant.element && plant.element.parentNode) {
+                    plant.element.parentNode.removeChild(plant.element);
+                }
+            });
+            
+            gameState.zombies.forEach(zombie => {
+                if (zombie.element && zombie.element.parentNode) {
+                    zombie.element.parentNode.removeChild(zombie.element);
+                }
+            });
+            
+            gameState.projectiles.forEach(projectile => {
+                if (projectile.element && projectile.element.parentNode) {
+                    projectile.element.parentNode.removeChild(projectile.element);
+                }
+            });
+            
+            gameState.suns.forEach(sun => {
+                if (sun.element && sun.element.parentNode) {
+                    sun.element.parentNode.removeChild(sun.element);
+                }
+            });
+            
+            // 重置游戏状态
+            gameState.plants = [];
+            gameState.zombies = [];
+            gameState.projectiles = [];
+            gameState.suns = [];
+            gameState.sun = 50;
+            gameState.selectedPlant = null;
+            gameState.gameActive = true;
+            
+            updateSunCounter();
+            gameOverScreen.style.display = 'none';
+            
+            // 重置植物选择边框
+            plantOptions.forEach(opt => opt.style.border = '2px solid #2e7d32');
+            
+            // 重新开始游戏循环
+            gameLoop();
+        }
+
+        // 辅助函数
+        function getPlantCost(plantType) {
+            switch (plantType) {
+                case 'sunflower': return 50;
+                case 'peashooter': return 100;
+                case 'wallnut': return 50;
+                default: return 0;
+            }
+        }
+
+        function getPlantHealth(plantType) {
+            switch (plantType) {
+                case 'sunflower': return 50;
+                case 'peashooter': return 75;
+                case 'wallnut': return 200;
+                default: return 50;
+            }
+        }
+
+        // 初始化游戏
+        initLawn();
+        gameLoop();
+        
+        // 事件监听
+        restartBtn.addEventListener('click', restartGame);
+    </script>
+</body>
+</html>
